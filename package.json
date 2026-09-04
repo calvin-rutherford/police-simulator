@@ -3,6 +3,6 @@
   "private": true,
   "scripts": {
     "export:web": "bash scripts/export-web.sh",
-    "test": "godot --headless --path . --script res://tests/smoke_test.gd"
+    "test": "godot --headless --editor --path . --quit && godot --headless --path . --script res://tests/smoke_test.gd"
   }
 }

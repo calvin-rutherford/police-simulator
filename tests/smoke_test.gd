@@ -31,7 +31,7 @@ func _run() -> void:
 	scene.player._unhandled_input(q_key)
 	check(not scene.player.gun_drawn, "Q holsters the sidearm")
 	scene.reset_game()
-	check(scene.player.gun_drawn and scene.gun_label.text == "🔫 READY", "reset synchronizes the drawn sidearm HUD")
+	check(scene.player.gun_drawn and scene.gun_label.text == "READY", "reset synchronizes the drawn sidearm HUD")
 	scene.show_caught()
 	scene.player.input_enabled = false
 	before_shots = scene.shots_fired

@@ -3,7 +3,8 @@ set -euo pipefail
 
 readonly GODOT_VERSION="4.4.1"
 readonly GODOT_RELEASE="${GODOT_VERSION}-stable"
-readonly PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly PROJECT_DIR
 readonly TOOLS_DIR="${PROJECT_DIR}/.tools/godot-${GODOT_RELEASE}"
 
 if command -v godot >/dev/null 2>&1; then

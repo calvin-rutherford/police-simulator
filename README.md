@@ -1,6 +1,6 @@
 # Street Beat: Keep It Safe
 
-A tiny Godot 4 browser prototype for one player. You patrol one comic-book graybox street in first person. The goal is simple: keep civilians safe. Shooting near people makes them run; shooting a civilian three times activates two visible police pursuers.
+A tiny Godot 4 browser prototype for one player. You patrol one comic-book graybox street in first person. The goal is simple: keep civilians safe. Shooting near people makes them run; shooting three civilians activates two visible police pursuers.
 
 ## Scope
 
