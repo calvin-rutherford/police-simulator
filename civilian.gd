@@ -101,4 +101,4 @@ func reset_state(start: Vector3) -> void:
 	visible = true
 	for child in get_children():
 		if child is CollisionShape3D:
-			child.disabled = false
+			child.set_deferred("disabled", false)

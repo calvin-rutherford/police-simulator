@@ -3,6 +3,7 @@ class_name StreetBeatGame
 
 const CIVILIAN_KILL_THRESHOLD := 3
 const CIVILIAN_COLORS := [Color("#5bd6c0"), Color("#ff9f68"), Color("#b08cff"), Color("#68b5ff"), Color("#ffd447")]
+const POLICE_STARTS := [Vector3(-2.8, 0.1, -16.0), Vector3(2.8, 0.1, -16.0)]
 
 var player: StreetPlayer
 var civilians: Array[StreetCivilian] = []
@@ -122,7 +123,7 @@ func _build_police() -> void:
 		var officer := StreetPolice.new()
 		officer.name = "Police_Pursuer_%02d" % index
 		add_child(officer)
-		officer.setup(self, Vector3(-9.0 if index == 0 else 9.0, 0.1, -15.0))
+		officer.setup(self, POLICE_STARTS[index])
 		officer.reset_state(officer.global_position)
 		police.append(officer)
 
@@ -201,7 +202,7 @@ func _make_beep(frequency: float, duration: float) -> AudioStreamWAV:
 	return stream
 
 func _on_fire(origin: Vector3, direction: Vector3) -> void:
-	if caught or not player.gun_drawn:
+	if not player.gun_drawn:
 		return
 	_fire_hitscan(origin, direction)
 
@@ -293,7 +294,7 @@ func reset_game() -> void:
 	for index in civilians.size():
 		civilians[index].reset_state(starts[index])
 	for index in police.size():
-		police[index].reset_state(Vector3(-9.0 if index == 0 else 9.0, 0.1, -15.0))
+		police[index].reset_state(POLICE_STARTS[index])
 	_update_hud()
 
 # Deterministic behavior hooks used by the executable smoke test, not by gameplay UI.

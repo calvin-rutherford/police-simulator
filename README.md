@@ -39,8 +39,13 @@ npm run export:web
 python3 -m http.server 4173 --directory public
 ```
 
-`export_presets.cfg` defines the **Web** preset with extension and thread support disabled so the export is single-threaded/non-isolated and needs no application server. `public/` is intentionally ignored; export a fresh release for delivery and record its size with `du -sh public`.
+`export_presets.cfg` defines the **Web** preset with extension and thread support disabled so the export is single-threaded/non-isolated and needs no application server. `public/` is intentionally ignored; export a fresh release for delivery and record its size with `du -sh public`. The export script uses an installed `godot` locally. On a Linux build host without Godot, it downloads the pinned official Godot 4.4.1 editor and matching export templates into the ignored `.tools/` cache.
 
 ## Vercel
 
-Create or connect a Vercel project to this repository, set the framework to **Other**, and set the output directory to `public`. There is no build step after `npm run export:web`; run the export during deployment or commit the release payload only if the connected deployment workflow requires it. `vercel.json` supplies static WebAssembly and cache headers. The repository is Vercel-ready, but no Vercel account/project is connected by this prototype task.
+1. Import this repository in Vercel and select the feature branch or merged default branch to deploy.
+2. Leave the root directory at the repository root and select framework **Other**.
+3. Keep the settings supplied by `vercel.json`: build command `npm run export:web` and output directory `public`.
+4. Select **Deploy**. Vercel downloads the pinned official Godot tools, creates `public/index.html` and its payload, then serves that directory with the configured WebAssembly and cache headers.
+
+No Godot binary, export template, cache, or generated web payload is committed, and no Vercel environment variable is required.

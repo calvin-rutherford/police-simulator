@@ -1,4 +1,5 @@
 {
+  "buildCommand": "npm run export:web",
   "outputDirectory": "public",
   "cleanUrls": false,
   "headers": [

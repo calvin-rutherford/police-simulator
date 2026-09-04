@@ -30,6 +30,16 @@ func _run() -> void:
 	q_key.pressed = true
 	scene.player._unhandled_input(q_key)
 	check(not scene.player.gun_drawn, "Q holsters the sidearm")
+	scene.reset_game()
+	check(scene.player.gun_drawn and scene.gun_label.text == "🔫 READY", "reset synchronizes the drawn sidearm HUD")
+	scene.show_caught()
+	scene.player.input_enabled = false
+	before_shots = scene.shots_fired
+	scene.player._unhandled_input(mouse)
+	await process_frame
+	check(scene.shots_fired == before_shots + 1, "sidearm remains fireable after police catch the player")
+	scene.player._unhandled_input(q_key)
+	check(not scene.player.gun_drawn, "Q holsters the sidearm after police catch the player")
 	scene.player._unhandled_input(q_key)
 	check(scene.player.gun_drawn, "Q draws the sidearm again")
 	scene.reset_game()
@@ -42,9 +52,18 @@ func _run() -> void:
 	check(scene.get_status_snapshot()["kills"] == 3, "civilian warning meter increments on valid hits")
 	check(scene.get_status_snapshot()["police"], "police pursue at documented three-kill threshold")
 	scene.reset_game()
+	await process_frame
 	var reset_snapshot: Dictionary = scene.get_status_snapshot()
 	check(reset_snapshot["kills"] == 0 and not reset_snapshot["police"] and not reset_snapshot["caught"], "R/reset clears consequence state")
 	check(scene.civilians[0].active and not scene.civilians[0].is_fleeing(), "reset restores civilians")
+	var civilian_collider: CollisionShape3D
+	for child in scene.civilians[0].get_children():
+		if child is CollisionShape3D:
+			civilian_collider = child
+			break
+	check(civilian_collider != null, "civilian exposes hit collision")
+	check(not civilian_collider.disabled, "reset restores civilian hit collision")
+	check(abs(scene.police[0].global_position.x) < 3.0 and scene.police[0].global_position.z == -16.0, "police reset to the open street")
 	var passed := failures.is_empty()
 	await create_timer(0.2).timeout
 	scene.queue_free()

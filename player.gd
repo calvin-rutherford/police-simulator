@@ -82,7 +82,7 @@ func _material(color: Color) -> StandardMaterial3D:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		if input_enabled and gun_drawn and camera:
+		if gun_drawn and camera:
 			fire_requested.emit(camera.global_position, -camera.global_transform.basis.z)
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -136,3 +136,4 @@ func reset_state() -> void:
 	gun_drawn = true
 	weapon.visible = true
 	input_enabled = true
+	weapon_changed.emit(gun_drawn)
