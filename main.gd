@@ -18,6 +18,7 @@ var status_label: Label
 var objective_label: Label
 var warning_label: Label
 var gun_label: Label
+var warning_icon: Polygon2D
 var flash_panel: ColorRect
 var audio_player: AudioStreamPlayer
 var alert_audio: AudioStreamWAV
@@ -136,7 +137,7 @@ func _build_hud() -> void:
 	top.position = Vector2(18, 18)
 	top.size = Vector2(245, 208)
 	layer.add_child(top)
-	var title := _label("★ STREET BEAT", Vector2(18, 12), 26, Color("#ffd447"))
+	var title := _label("STREET BEAT", Vector2(18, 12), 26, Color("#ffd447"))
 	top.add_child(title)
 	var controls := _label("W A S D   MOVE\nMOUSE   LOOK\nCLICK   FIRE\nQ   GUN\nESC   FREE\nR   RESET", Vector2(20, 55), 18, Color("#f5f7ff"))
 	top.add_child(controls)
@@ -145,16 +146,19 @@ func _build_hud() -> void:
 	badge.position = Vector2(278, 18)
 	badge.size = Vector2(250, 48)
 	layer.add_child(badge)
-	objective_label = _label("★ KEEP PEOPLE SAFE", Vector2(14, 8), 22, Color("#17213b"))
+	objective_label = _label("KEEP PEOPLE SAFE", Vector2(14, 8), 22, Color("#17213b"))
 	badge.add_child(objective_label)
 	var warning_panel := ColorRect.new()
 	warning_panel.color = Color(0.04, 0.06, 0.12, 0.92)
 	warning_panel.position = Vector2(920, 18)
 	warning_panel.size = Vector2(342, 150)
 	layer.add_child(warning_panel)
-	warning_label = _label("⚠ 0 / 3\nSAFE", Vector2(20, 17), 27, Color("#5bd6c0"))
+	warning_icon = _warning_icon(Vector2(20, 20), Color("#5bd6c0"))
+	warning_panel.add_child(warning_icon)
+	warning_label = _label("0 / 3\nSAFE", Vector2(62, 17), 27, Color("#5bd6c0"))
 	warning_panel.add_child(warning_label)
-	gun_label = _label("🔫 READY", Vector2(20, 88), 22, Color("#ffd447"))
+	warning_panel.add_child(_gun_icon(Vector2(20, 94), Color("#ffd447")))
+	gun_label = _label("READY", Vector2(62, 88), 22, Color("#ffd447"))
 	warning_panel.add_child(gun_label)
 	var crosshair := _label("+", Vector2(625, 340), 38, Color("#ffd447"))
 	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -178,6 +182,27 @@ func _label(text: String, position: Vector2, font_size: int, color: Color) -> La
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
 	return label
+
+func _warning_icon(position: Vector2, color: Color) -> Polygon2D:
+	var icon := Polygon2D.new()
+	icon.position = position
+	icon.polygon = PackedVector2Array([Vector2(16, 0), Vector2(32, 30), Vector2(0, 30)])
+	icon.color = color
+	var mark := _label("!", Vector2(12, 2), 22, Color("#17213b"))
+	icon.add_child(mark)
+	return icon
+
+func _gun_icon(position: Vector2, color: Color) -> Node2D:
+	var icon := Node2D.new()
+	icon.position = position
+	var body := Polygon2D.new()
+	body.polygon = PackedVector2Array([
+		Vector2(0, 0), Vector2(34, 0), Vector2(34, 10), Vector2(18, 10),
+		Vector2(15, 28), Vector2(6, 28), Vector2(9, 10), Vector2(0, 10)
+	])
+	body.color = color
+	icon.add_child(body)
+	return icon
 
 func _build_audio() -> void:
 	audio_player = AudioStreamPlayer.new()
@@ -249,7 +274,7 @@ func register_civilian_kill(_civilian: StreetCivilian) -> void:
 
 func _activate_police() -> void:
 	police_pursuit_active = true
-	status_text = "🚓 CHASE! PRESS R"
+	status_text = "CHASE! PRESS R"
 	status_color = Color("#f45b69")
 	for officer in police:
 		officer.activate()
@@ -260,25 +285,27 @@ func show_caught() -> void:
 	if caught:
 		return
 	caught = true
-	status_text = "🚓 CAUGHT! PRESS R"
+	status_text = "CAUGHT! PRESS R"
 	status_color = Color("#f45b69")
 	_update_hud()
 
 func _on_weapon_changed(drawn: bool) -> void:
-	gun_label.text = "🔫 READY" if drawn else "🔫 HOLSTER"
+	gun_label.text = "READY" if drawn else "HOLSTER"
 	gun_label.add_theme_color_override("font_color", Color("#ffd447") if drawn else Color("#a7b1c8"))
 
 func _process(_delta: float) -> void:
 	if police_pursuit_active and not caught:
-		status_text = "🚓 CHASE! PRESS R"
+		status_text = "CHASE! PRESS R"
 		status_color = Color("#f45b69")
 	_update_hud()
 
 func _update_hud() -> void:
 	if not warning_label or not status_label:
 		return
-	warning_label.text = "⚠ %d / %d\n%s" % [civilian_kills, CIVILIAN_KILL_THRESHOLD, "🚓 CHASE" if police_pursuit_active else "SAFE"]
-	warning_label.add_theme_color_override("font_color", Color("#f45b69") if police_pursuit_active else Color("#5bd6c0"))
+	var warning_color := Color("#f45b69") if police_pursuit_active else Color("#5bd6c0")
+	warning_label.text = "%d / %d\n%s" % [civilian_kills, CIVILIAN_KILL_THRESHOLD, "CHASE" if police_pursuit_active else "SAFE"]
+	warning_label.add_theme_color_override("font_color", warning_color)
+	warning_icon.color = warning_color
 	status_label.text = status_text
 	status_label.add_theme_color_override("font_color", status_color)
 
