@@ -1,0 +1,9 @@
+.cache/
+.godot/
+export/
+public/*
+!public/.gitkeep
+.tools/
+*.tmp
+*.uid
+*.import
