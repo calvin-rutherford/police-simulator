@@ -1,0 +1,8 @@
+{
+  "name": "street-beat-godot-web",
+  "private": true,
+  "scripts": {
+    "export:web": "godot --headless --path . --export-release Web public/index.html",
+    "test": "godot --headless --path . --script res://tests/smoke_test.gd"
+  }
+}
