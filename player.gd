@@ -1,139 +1,102 @@
 extends CharacterBody3D
-class_name StreetPlayer
+class_name FrontierPlayer
 
 signal fire_requested(origin: Vector3, direction: Vector3)
-signal weapon_changed(drawn: bool)
+signal reload_requested
+signal select_requested(index: int)
 
-const WALK_SPEED := 7.0
-const JUMP_SPEED := 7.0
-const LOOK_SENSITIVITY := 0.0025
-
-var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
-var gun_drawn := true
-var input_enabled := true
-var camera: Camera3D
+var input_enabled := false
+var speed := 7.0
 var head: Node3D
+var camera: Camera3D
 var weapon: Node3D
 var muzzle: OmniLight3D
+var weapon_id := "revolver"
+var recoil := 0.0
 
 func _ready() -> void:
-	_build_body()
-	_build_weapon()
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-
-func _build_body() -> void:
+	collision_layer = 2
+	collision_mask = 1 | 16
 	var collider := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.42
+	capsule.radius = 0.38
 	capsule.height = 1.8
 	collider.shape = capsule
 	collider.position.y = 0.9
 	add_child(collider)
 	head = Node3D.new()
-	head.name = "Head"
-	head.position.y = 1.55
+	head.position.y = 1.6
 	add_child(head)
 	camera = Camera3D.new()
-	camera.name = "FirstPersonCamera"
-	camera.fov = 78.0
-	camera.near = 0.05
+	camera.fov = 76
+	camera.near = 0.04
 	head.add_child(camera)
+	set_weapon("revolver")
 
-func _build_weapon() -> void:
+func set_weapon(id: String) -> void:
+	weapon_id = id
+	if is_instance_valid(weapon):
+		weapon.queue_free()
 	weapon = Node3D.new()
-	weapon.name = "UnrestrictedSidearm"
-	weapon.position = Vector3(0.42, -0.34, -0.72)
 	camera.add_child(weapon)
-	var grip := MeshInstance3D.new()
-	var grip_mesh := BoxMesh.new()
-	grip_mesh.size = Vector3(0.13, 0.34, 0.16)
-	grip.mesh = grip_mesh
-	grip.position = Vector3(0, -0.13, 0)
-	grip.rotation_degrees.x = -12
-	grip.material_override = _material(Color("#222b43"))
-	weapon.add_child(grip)
-	var slide := MeshInstance3D.new()
-	var slide_mesh := BoxMesh.new()
-	slide_mesh.size = Vector3(0.22, 0.14, 0.52)
-	slide.mesh = slide_mesh
-	slide.material_override = _material(Color("#d8e0ea"))
-	weapon.add_child(slide)
-	var stripe := MeshInstance3D.new()
-	var stripe_mesh := BoxMesh.new()
-	stripe_mesh.size = Vector3(0.225, 0.035, 0.20)
-	stripe.mesh = stripe_mesh
-	stripe.position.z = -0.13
-	stripe.position.y = -0.01
-	stripe.material_override = _material(Color("#f45b69"))
-	weapon.add_child(stripe)
+	weapon.position = Vector3(0.38, -0.32, -0.65)
+	var color := Color(FrontierRules.WEAPONS[id].color)
+	FrontierVisuals.box(weapon, Vector3(0, -0.1, 0.1), Vector3(0.14, 0.3, 0.18), Color("#a87a5b")).rotation.x = -0.2
+	if id == "revolver":
+		FrontierVisuals.box(weapon, Vector3(0, 0.03, -0.14), Vector3(0.12, 0.12, 0.5), color)
+		FrontierVisuals.cylinder(weapon, Vector3(0, -0.01, 0.03), 0.13, 0.2, Color("#d5dde1")).rotation.x = PI / 2
+	elif id == "shotgun":
+		for x in [-0.065, 0.065]:
+			FrontierVisuals.cylinder(weapon, Vector3(x, 0, -0.26), 0.06, 0.7, Color("#7b8695")).rotation.x = PI / 2
+		FrontierVisuals.box(weapon, Vector3(0, -0.07, -0.13), Vector3(0.23, 0.14, 0.35), color)
+	else:
+		FrontierVisuals.cylinder(weapon, Vector3(0, 0, -0.13), 0.21, 0.65, color).rotation.x = PI / 2
+		FrontierVisuals.cylinder(weapon, Vector3(0, 0, -0.47), 0.24, 0.07, Color("#f7d680")).rotation.x = PI / 2
 	muzzle = OmniLight3D.new()
-	muzzle.light_color = Color("#ffd447")
-	muzzle.light_energy = 0.0
-	muzzle.omni_range = 3.0
-	muzzle.position.z = -0.34
 	weapon.add_child(muzzle)
-
-func _material(color: Color) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.8
-	return mat
+	muzzle.position.z = -0.55
+	muzzle.light_color = color
+	muzzle.light_energy = 0
+	muzzle.omni_range = 4
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not input_enabled:
+		return
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		rotate_y(-event.relative.x * 0.0024)
+		head.rotation.x = clampf(head.rotation.x - event.relative.y * 0.0024, -1.35, 1.35)
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		if gun_drawn and camera:
-			fire_requested.emit(camera.global_position, -camera.global_transform.basis.z)
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_Q:
-		toggle_weapon()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_R:
-		get_tree().call_group("game", "reset_game")
-	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and input_enabled:
-		rotate_y(-event.relative.x * LOOK_SENSITIVITY)
-		head.rotate_x(-event.relative.y * LOOK_SENSITIVITY)
-		head.rotation.x = clamp(head.rotation.x, deg_to_rad(-80.0), deg_to_rad(80.0))
+		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		else:
+			fire_requested.emit(camera.global_position, -camera.global_basis.z)
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.physical_keycode:
+			KEY_R: reload_requested.emit()
+			KEY_Q: select_requested.emit(-1)
+			KEY_1: select_requested.emit(0)
+			KEY_2: select_requested.emit(1)
+			KEY_3: select_requested.emit(2)
 
 func _physics_process(delta: float) -> void:
 	if not input_enabled:
 		velocity = Vector3.ZERO
 		return
 	if not is_on_floor():
-		velocity.y -= gravity * delta
+		velocity.y -= 20 * delta
 	if Input.is_action_just_pressed("jump") and is_on_floor():
-		velocity.y = JUMP_SPEED
+		velocity.y = 7
 	var input_vec := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var direction := (transform.basis * Vector3(input_vec.x, 0, input_vec.y)).normalized()
-	if direction:
-		velocity.x = direction.x * WALK_SPEED
-		velocity.z = direction.z * WALK_SPEED
-	else:
-		velocity.x = move_toward(velocity.x, 0, WALK_SPEED * 8.0 * delta)
-		velocity.z = move_toward(velocity.z, 0, WALK_SPEED * 8.0 * delta)
+	var direction := (basis * Vector3(input_vec.x, 0, input_vec.y)).normalized()
+	velocity.x = direction.x * speed
+	velocity.z = direction.z * speed
 	move_and_slide()
-	global_position.x = clamp(global_position.x, -19.0, 19.0)
-	global_position.z = clamp(global_position.z, -19.0, 19.0)
-
-func toggle_weapon() -> void:
-	gun_drawn = not gun_drawn
-	weapon.visible = gun_drawn
-	weapon_changed.emit(gun_drawn)
+	global_position.x = clampf(global_position.x, -65, 65)
+	global_position.z = clampf(global_position.z, -65, 65)
+	recoil = move_toward(recoil, 0, delta * 2.4)
+	weapon.position.z = -0.65 + recoil
+	weapon.rotation.x = recoil * 0.8
+	muzzle.light_energy = recoil * 12
 
 func flash_muzzle() -> void:
-	if muzzle:
-		muzzle.light_energy = 4.0
-		get_tree().create_timer(0.06).timeout.connect(_clear_muzzle)
-
-func _clear_muzzle() -> void:
-	if is_instance_valid(muzzle):
-		muzzle.light_energy = 0.0
-
-func reset_state() -> void:
-	global_position = Vector3(0, 0.1, 12)
-	rotation = Vector3.ZERO
-	head.rotation = Vector3.ZERO
-	gun_drawn = true
-	weapon.visible = true
-	input_enabled = true
-	weapon_changed.emit(gun_drawn)
+	recoil = 0.15

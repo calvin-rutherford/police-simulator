@@ -1,11 +1,11 @@
 ; Engine configuration file.
-; Street Beat: Keep It Safe
+; Sunset Sheriff — original procedural Western town defense
 config_version=5
 
 [application]
-config/name="Street Beat: Keep It Safe"
+config/name="Sunset Sheriff"
 run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.7", "GL Compatibility")
+config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [display]
@@ -27,8 +27,7 @@ move_left={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":6
 move_right={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":68)]}
 jump={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":32)]}
 fire={"deadzone": 0.5, "events": [Object(InputEventMouseButton,"button_index":1)]}
-toggle_gun={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":81)]}
-restart={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":82)]}
+reload={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":82)]}
 
 [web]
 wasm_mem_size=64

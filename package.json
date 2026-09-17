@@ -1,5 +1,5 @@
 {
-  "name": "street-beat-godot-web",
+  "name": "sunset-sheriff-godot-web",
   "private": true,
   "scripts": {
     "export:web": "bash scripts/export-web.sh",
