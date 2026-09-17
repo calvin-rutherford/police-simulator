@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly GODOT_VERSION="4.4.1"
+readonly GODOT_VERSION="4.5"
 readonly GODOT_RELEASE="${GODOT_VERSION}-stable"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly PROJECT_DIR

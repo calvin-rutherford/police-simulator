@@ -7,3 +7,4 @@ public/*
 *.tmp
 *.uid
 *.import
+.local-data/
