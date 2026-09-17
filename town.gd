@@ -11,6 +11,13 @@ var sun: DirectionalLight3D
 var bell: Node3D
 var rng := RandomNumberGenerator.new()
 const PADS := [Vector3(-5, 0, -16), Vector3(5, 0, -16), Vector3(-5, 0, 17), Vector3(5, 0, 17)]
+const KEEPERS := {
+	"Gunsmith": {"name": "Mabel", "line": "Click-clack! A full ammo pouch is a happy pouch.", "color": "#699ea6", "face": 1},
+	"General Store": {"name": "June", "line": "Soft vests, sweet lemonade. I've got your back!", "color": "#a986bd", "face": 2},
+	"Sheriff Office": {"name": "Marshal Kit", "line": "Teamwork, partner! Build on the striped sites.", "color": "#d4ad5b", "face": 3},
+	"Saloon": {"name": "Sunny", "line": "Biscuits for brave bell-keepers! Save some for tonight.", "color": "#db8b71", "face": 7},
+}
+var construction_root: Node3D
 
 func _ready() -> void:
 	rng.seed = 4501
@@ -18,6 +25,9 @@ func _ready() -> void:
 	_build_desert()
 	_build_town()
 	_build_paths()
+	var moving: Array = [construction_root]
+	for resident in residents: moving.append(resident.node)
+	V.batch_static(self, moving)
 
 func _build_sky() -> void:
 	var world := WorldEnvironment.new()
@@ -42,7 +52,8 @@ func _build_sky() -> void:
 	sun.rotation_degrees = Vector3(-48, -32, 0)
 	sun.light_color = Color("#ffe2ac")
 	sun.light_energy = 0.45
-	sun.shadow_enabled = true
+	# Keep the browser baseline inexpensive, including software WebGL fallbacks.
+	sun.shadow_enabled = not OS.has_feature("web")
 	sun.directional_shadow_max_distance = 100
 	add_child(sun)
 
@@ -87,11 +98,11 @@ func _cactus(pos: Vector3, scale_factor: float) -> void:
 
 func _build_town() -> void:
 	_building(Vector3(-16, 0, -23), PI / 2, "GUNSMITH", Color("#95b6b1"), "Gunsmith", "Mabel", "Aim steady, sheriff! The cannon makes every night a party.")
-	_building(Vector3(-16, 0, -7), PI / 2, "THE COZY SALOON", Color("#d59480"), "", "Sunny", "Welcome! Wages arrive each dawn. Our doors stay open for you.")
+	_building(Vector3(-20, 0, -7), PI / 2, "THE COZY SALOON", Color("#d59480"), "Saloon", "Sunny", KEEPERS.Saloon.line, true)
 	_building(Vector3(-16, 0, 9), PI / 2, "CACTUS COTTAGE", Color("#d6b37b"), "", "Pip", "Bandits arrive from the four trails. Watch your little map!")
 	_building(Vector3(-16, 0, 25), PI / 2, "TRADING POST", Color("#acb990"), "", "Fern", "The town bell starts the night. Take all the prep time you need.")
-	_building(Vector3(16, 0, -23), -PI / 2, "GENERAL STORE", Color("#c3b0cc"), "General Store", "June", "Padded vests, lemonade, and speedy boots. Stay safe out there!")
-	_building(Vector3(16, 0, -7), -PI / 2, "SHERIFF OFFICE", Color("#dfbf7f"), "Sheriff Office", "Marshal Kit", "Deputies and turrets repair at dawn. No friendly fire here!")
+	_building(Vector3(16, 0, -23), -PI / 2, "GENERAL STORE", Color("#c3b0cc"), "General Store", "June", KEEPERS["General Store"].line)
+	_building(Vector3(16, 0, -7), -PI / 2, "SHERIFF OFFICE", Color("#dfbf7f"), "Sheriff Office", "Marshal Kit", KEEPERS["Sheriff Office"].line)
 	_building(Vector3(16, 0, 9), -PI / 2, "SUNFLOWER HOME", Color("#8fbab5"), "", "Bea", "Sleepwalkers appear on night 4. Big marshmallow brutes on night 7!")
 	_building(Vector3(16, 0, 25), -PI / 2, "BOOT HILL BAKERY", Color("#d8a5aa"), "", "Biscuit", "If a night goes wrong, retry your sunset checkpoint. You've got this!")
 	_building(Vector3(0, 0, -39), 0, "SUNSET STATION", Color("#b3ba91"), "", "Dusty", "Keep the bell safe! If it falls, the bandits take the town.")
@@ -112,11 +123,12 @@ func _build_town() -> void:
 		V.box(bell, Vector3(x, 1.9, 0), Vector3(0.22, 3, 0.22), Color("#886953"))
 	V.box(bell, Vector3(0, 3.35, 0), Vector3(2.5, 0.25, 0.4), Color("#886953"))
 	V.cylinder(bell, Vector3(0, 2.65, 0), 0.58, 0.8, Color("#f2cb72"), 0.3)
-	V.label(bell, "★ TOWN BELL ★", Vector3(0, 4.2, 0), Color("#fff0bd"), 28)
+	V.label(bell, "* TOWN BELL *", Vector3(0, 4.2, 0), Color("#fff0bd"), 28)
 	shops.append({"name": "Town Bell", "position": Vector3(0, 0, 0)})
-	for pos in PADS:
-		V.cylinder(self, pos + Vector3(0, 0.07, 0), 1.05, 0.14, Color("#9c9e97"))
-		V.label(self, "POPPER PAD", pos + Vector3(0, 0.3, 0), Color("#f6e4bb"), 13)
+	for site in PADS.size():
+		shops.append({"name": "Build site", "site": site, "position": PADS[site]})
+	show_construction([])
+	_stable()
 	# Hitching rails, hay bales, barrels, wagons, water tower, and a friendly blocky horse.
 	for side in [-1, 1]:
 		for z in [-30, 1, 33]:
@@ -141,7 +153,7 @@ func _build_town() -> void:
 	V.cylinder(self, Vector3(28.5, 7.8, -32.5), 2.8, 0.8, Color("#ae7d70"), 0)
 	var horse := Node3D.new()
 	add_child(horse)
-	horse.position = Vector3(-7, 0, 3)
+	horse.position = Vector3(30, 0, 24)
 	V.box(horse, Vector3(0, 1.15, 0), Vector3(0.7, 0.8, 1.5), Color("#b78b72"))
 	V.box(horse, Vector3(0, 1.9, -0.65), Vector3(0.45, 0.9, 0.5), Color("#b78b72"))
 	V.box(horse, Vector3(0, 2.12, -0.92), Vector3(0.48, 0.4, 0.7), Color("#c59b80"))
@@ -160,57 +172,158 @@ func _wall(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
 		world_size = Vector3(size.z, size.y, size.x)
 	walls.append(AABB(center - world_size / 2, world_size))
 
-func _building(pos: Vector3, angle: float, title: String, color: Color, shop: String, resident: String, greeting: String) -> void:
+func _building(pos: Vector3, angle: float, title: String, color: Color, shop: String, resident: String, greeting: String, saloon: bool = false) -> void:
 	var building := Node3D.new()
 	add_child(building)
 	building.position = pos
 	building.rotation.y = angle
-	V.box(building, Vector3(0, 0.025, 0.6), Vector3(11, 0.05, 11), Color("#b58f6c"))
-	_wall(building, Vector3(-5, 2, 0), Vector3(0.35, 4, 8), color)
-	_wall(building, Vector3(5, 2, 0), Vector3(0.35, 4, 8), color)
-	_wall(building, Vector3(0, 2, -4), Vector3(10, 4, 0.35), color)
-	for x in [-3.3, 3.3]:
-		_wall(building, Vector3(x, 1.5, 4), Vector3(3.4, 3, 0.3), color)
-		V.box(building, Vector3(x, 1.9, 4.18), Vector3(1.8, 1.6, 0.09), Color("#ffe1a0"))
-		V.box(building, Vector3(x, 1.9, 4.25), Vector3(0.08, 1.6, 0.1), Color("#916c55"))
-		V.box(building, Vector3(x, 1.9, 4.25), Vector3(1.8, 0.08, 0.1), Color("#916c55"))
-	V.box(building, Vector3(0, 4.1, 0), Vector3(10.7, 0.3, 8.7), Color("#966c60"), true)
-	V.box(building, Vector3(0, 4.5, 4), Vector3(10.5, 2.0, 0.4), color)
-	V.box(building, Vector3(0, 5.52, 4), Vector3(10.8, 0.15, 0.6), Color("#f2d7a0"))
-	V.box(building, Vector3(0, 3.05, 5.0), Vector3(11, 0.18, 2.8), Color("#f0c892"))
-	for x in [-4.8, 4.8]:
-		V.box(building, Vector3(x, 1.5, 5.9), Vector3(0.18, 3, 0.18), Color("#967158"), true)
-	V.label(building, title, Vector3(0, 4.75, 4.4), Color("#fff0cb"), 25)
-	V.box(building, Vector3(0, 1, -1.6), Vector3(5.4, 1.5, 0.8), Color("#987259"), true)
-	V.box(building, Vector3(0, 1.8, -1.6), Vector3(5.7, 0.14, 1), Color("#edc991"))
+	var w := 18.0 if saloon else 10.0
+	var d := 14.0 if saloon else 8.0
+	V.box(building, Vector3(0, 0.025, 0.6), Vector3(w + 1, 0.05, d + 3), Color("#b58f6c"))
+	for side in [-1, 1]:
+		_wall(building, Vector3(side * w / 2, 2, 0), Vector3(0.35, 4, d), color)
+		var x: float = side * (w / 4 + 0.8)
+		_wall(building, Vector3(x, 1.5, d / 2), Vector3(w / 2 - 1.6, 3, 0.3), color)
+		V.box(building, Vector3(x, 1.9, d / 2 + 0.18), Vector3(1.8, 1.6, 0.09), Color("#ffe1a0"))
+		V.box(building, Vector3(x, 1.9, d / 2 + 0.25), Vector3(0.08, 1.6, 0.1), Color("#916c55"))
+		V.box(building, Vector3(x, 1.9, d / 2 + 0.25), Vector3(1.8, 0.08, 0.1), Color("#916c55"))
+		V.box(building, Vector3(side * (w / 2 - 0.2), 1.5, d / 2 + 1.9), Vector3(0.18, 3, 0.18), Color("#967158"), true)
+	_wall(building, Vector3(0, 2, -d / 2), Vector3(w, 4, 0.35), color)
+	V.box(building, Vector3(0, 4.1, 0), Vector3(w + 0.7, 0.3, d + 0.7), Color("#966c60"), true)
+	V.box(building, Vector3(0, 4.5, d / 2), Vector3(w + 0.5, 2, 0.4), color)
+	V.box(building, Vector3(0, 5.52, d / 2), Vector3(w + 0.8, 0.15, 0.6), Color("#f2d7a0"))
+	V.box(building, Vector3(0, 3.05, d / 2 + 1), Vector3(w + 1, 0.18, 2.8), Color("#f0c892"))
+	V.label(building, title, Vector3(0, 4.75, d / 2 + 0.4), Color("#fff0cb"), 25)
+	var bar_z := -3.8 if saloon else -1.6
+	V.box(building, Vector3(0, 0.48, bar_z), Vector3(12 if saloon else 5.4, 0.96, 0.8), Color("#987259"), true)
+	V.box(building, Vector3(0, 1.03, bar_z), Vector3(12.3 if saloon else 5.7, 0.14, 1), Color("#edc991"))
+	if saloon: _saloon_furniture(building)
+	if not shop.is_empty(): _display(building, shop, bar_z)
 	for x in [-3.4, 3.4]:
 		V.cylinder(building, Vector3(x, 0.6, 1.3), 0.6, 1.2, Color("#bb9370"))
 		V.box(building, Vector3(x, 1.23, 1.3), Vector3(1.7, 0.1, 1.4), Color("#e1bc85"))
 		V.cylinder(building, Vector3(x, 1.43, 1.3), 0.13, 0.32, Color("#f3d9b3"))
 	var person := Node3D.new()
 	building.add_child(person)
-	person.position = Vector3(0, 0.06, -2.8)
+	person.position = Vector3(0, 0.06, bar_z - 1.3)
 	person.rotation.y = PI
-	V.person(person, color.darkened(0.15))
+	var identity: Dictionary = KEEPERS.get(shop, {"face": residents.size(), "color": color.to_html()})
+	V.person(person, Color(identity.color), "civilian", identity.face)
 	V.label(person, resident, Vector3(0, 2.6, 0), Color("#fff0cb"), 18)
 	residents.append({"node": person, "home": person.position, "name": resident, "greeting": greeting})
-	if title in ["THE COZY SALOON", "CACTUS COTTAGE", "SUNFLOWER HOME"]:
+	if title in ["CACTUS COTTAGE", "SUNFLOWER HOME"]:
 		var guest := Node3D.new()
 		building.add_child(guest)
 		guest.position = Vector3(2.4, 0.06, 2.6)
 		guest.rotation.y = -0.4
-		V.person(guest, Color("#929ecb"))
+		V.person(guest, Color("#929ecb"), "civilian", residents.size())
 		residents.append({"node": guest, "home": guest.position, "name": "Neighbor", "greeting": "Howdy, sheriff! We're cheering for you."})
 	if not shop.is_empty():
-		shops.append({"name": shop, "position": building.to_global(Vector3(0, 0, 6.4))})
+		shops.append({"name": shop, "position": building.to_global(Vector3(0, 0, d / 2 + 2.4))})
 		# A second interaction spot lets the shop work from inside as well as the porch.
-		shops.append({"name": shop, "position": building.to_global(Vector3(0, 0, 0))})
+		shops.append({"name": shop, "position": building.to_global(Vector3(0, 0, bar_z + 1.5))})
 	var lamp := OmniLight3D.new()
 	building.add_child(lamp)
 	lamp.position = Vector3(0, 2.8, 3)
 	lamp.light_color = Color("#ffcf80")
 	lamp.light_energy = 0.9
 	lamp.omni_range = 8
+
+func _saloon_furniture(building: Node3D) -> void:
+	# Wide room, long walk-up bar, backbar shelves, stools, tables and a piano.
+	for y in [1.3, 2.3]:
+		V.box(building, Vector3(0, y, -6.6), Vector3(13, 0.12, 0.5), Color("#76534b"))
+		for x in range(-5, 6):
+			V.cylinder(building, Vector3(x, y + 0.22, -6.6), 0.12, 0.4, Color("#8dbb98") if x % 2 else Color("#deb06e"))
+	for x in [-5, -2.5, 2.5, 5]:
+		V.cylinder(building, Vector3(x, 0.4, -2.6), 0.12, 0.8, Color("#76534b"))
+		V.cylinder(building, Vector3(x, 0.83, -2.6), 0.38, 0.16, Color("#cc8f73"))
+	for x in [-5.8, 5.8]:
+		for z in [0.3, 4.3]:
+			V.cylinder(building, Vector3(x, 0.5, z), 0.18, 1, Color("#76534b"))
+			V.cylinder(building, Vector3(x, 1.03, z), 1.25, 0.16, Color("#d4aa76"))
+			for side in [-1, 1]:
+				V.box(building, Vector3(x + side * 1.5, 0.4, z), Vector3(0.6, 0.8, 0.6), Color("#a67361"))
+			V.cylinder(building, Vector3(x, 1.26, z), 0.13, 0.3, Color("#fff0cd"))
+	V.box(building, Vector3(-7.8, 0.9, -4), Vector3(1.2, 1.8, 2.4), Color("#674d49"))
+	for i in 12:
+		V.box(building, Vector3(-7.1, 1.0, -5 + i * 0.17), Vector3(0.3, 0.08, 0.15), Color("#f5e1bd") if i % 3 else Color("#393f4b"))
+	V.label(building, "BISCUITS & GOOD COMPANY", Vector3(0, 3.2, -6.6), Color("#f9d28d"), 23)
+	for i in 11:
+		var guest := Node3D.new()
+		building.add_child(guest)
+		var positions := [Vector3(-4, 0.06, -1.6), Vector3(4, 0.06, -1.6), Vector3(-7, 0.06, 1.8), Vector3(-4, 0.06, 1.8), Vector3(4, 0.06, 1.8), Vector3(7, 0.06, 1.8), Vector3(-7, 0.06, 5.6), Vector3(-4, 0.06, 5.6), Vector3(4, 0.06, 5.6), Vector3(7, 0.06, 5.6), Vector3(-6.5, 0.06, -4.5)]
+		guest.position = positions[i]
+		guest.rotation.y = PI
+		V.person(guest, Color(["#729eaa", "#bd839d", "#9ca66e", "#cf995e"][i % 4]), "civilian", i + 4)
+		residents.append({"node": guest, "home": guest.position, "name": ["Rose", "Otis", "Lily", "Buck", "Cleo", "Ace", "Dot", "Teddy", "Willow", "Hank", "Piano Pat"][i], "greeting": ["Save a biscuit for the night!", "Two defenses. One brave sheriff!", "We love our town bell!"][i % 3]})
+
+func _display(building: Node3D, shop: String, z: float) -> void:
+	if shop == "Gunsmith":
+		for x in [-1.8, -1.4, -1.0]:
+			V.cylinder(building, Vector3(x, 1.3, z), 0.12, 0.42, Color("#e6bd68"), 0.07)
+		V.label(building, "$35  +36 / +12", Vector3(-1.4, 1.8, z), Color("#ffe3a0"), 14)
+	elif shop == "General Store":
+		V.box(building, Vector3(-1.6, 1.5, z), Vector3(0.65, 0.75, 0.24), Color("#83b9cb"))
+		for x in [-1.86, -1.34]:
+			V.box(building, Vector3(x, 1.97, z), Vector3(0.14, 0.25, 0.24), Color("#83b9cb"))
+		V.label(building, "$90", Vector3(-1.6, 2.4, z), Color("#ffe3a0"), 14)
+	elif shop == "Saloon":
+		for x in [-1.9, -1.6, -1.3]:
+			V.cylinder(building, Vector3(x, 1.18, z), 0.18, 0.14, Color("#e8b878"))
+		V.label(building, "$25  F +40", Vector3(-1.6, 1.7, z), Color("#ffe3a0"), 16)
+	else:
+		V.label(building, "*  $180", Vector3(-1.7, 1.7, z), Color("#ffe3a0"), 24)
+
+func _stable() -> void:
+	var stable := Node3D.new()
+	add_child(stable)
+	stable.position = Vector3(30, 0, 25)
+	for x in [-3, 3]:
+		for z in [-3, 3]:
+			V.box(stable, Vector3(x, 1.8, z), Vector3(0.25, 3.6, 0.25), Color("#926e55"), true)
+		V.box(stable, Vector3(x, 0.8, 0), Vector3(0.16, 0.16, 6), Color("#b89169"))
+	V.box(stable, Vector3(0, 3.6, 0), Vector3(7, 0.3, 7), Color("#a96f5c"))
+	V.label(stable, "SUNSET STABLE", Vector3(0, 4.2, 3), Color("#ffe3a0"), 25)
+	V.label(stable, "Our horse is resting", Vector3(0, 2.7, 3), Color("#ffe3a0"), 15)
+	V.box(stable, Vector3(2, 0.4, 1), Vector3(1.3, 0.8, 1.7), Color("#e9c975"))
+
+func show_construction(structures: Array) -> void:
+	if is_instance_valid(construction_root):
+		remove_child(construction_root)
+		construction_root.queue_free()
+	construction_root = Node3D.new()
+	add_child(construction_root)
+	for site in PADS.size():
+		var root := Node3D.new()
+		construction_root.add_child(root)
+		root.position = PADS[site]
+		V.box(root, Vector3(0, 0.025, 0), Vector3(2.8, 0.05, 2.8), Color("#b0ae8c"))
+		var entry: Dictionary = {}
+		for structure in structures:
+			if structure.site == site: entry = structure
+		if entry.is_empty():
+			for x in [-1.3, 1.3]:
+				V.box(root, Vector3(x, 0.1, 0), Vector3(0.15, 0.15, 2.8), Color("#f6d17b"))
+			V.label(root, "+  BUILD  [E]", Vector3(0, 1.5, 0), Color("#ffdf94"), 19)
+			V.label(root, "$150 / $280", Vector3(0, 1.0, 0), Color("#ffdf94"), 16)
+			continue
+		var total: int = FrontierRules.STRUCTURES[entry.kind].nights
+		var ready: bool = entry.remaining == 0
+		var height := 3.0 if entry.kind == "tower" else 1.1
+		for x in [-1, 1]:
+			for z in [-1, 1]:
+				V.box(root, Vector3(x, height / 2, z), Vector3(0.18, height, 0.18), Color("#9b795e"))
+		if ready or entry.remaining < total:
+			V.box(root, Vector3(0, height, 0), Vector3(2.4, 0.16, 2.4), Color("#c79a69"))
+		if ready:
+			V.label(root, "* READY", Vector3(0, height + 2.7, 0), Color("#abebcb"), 17)
+		else:
+			for i in 4:
+				V.box(root, Vector3(-0.7, 0.15 + i * 0.18, 0), Vector3(0.5, 0.16, 1.9), Color("#d5af77"))
+			V.label(root, "%s\n%d / %d  NIGHTS" % [FrontierRules.STRUCTURES[entry.kind].name, total - entry.remaining, total], Vector3(0, height + 0.8, 0), Color("#ffdf94"), 18)
+		for i in total:
+			V.box(root, Vector3(-0.3 + i * 0.6, 0.4, 1.45), Vector3(0.45, 0.35, 0.12), Color("#9ee3ba") if i < total - entry.remaining else Color("#6f7475"))
 
 func _build_paths() -> void:
 	grid.region = Rect2i(-68, -68, 137, 137)
@@ -244,3 +357,7 @@ func _process(_delta: float) -> void:
 		# Residents stay in their own businesses/homes and never enter combat groups.
 		resident.node.position.y = resident.home.y + sin(time * 1.8 + index) * 0.018
 		resident.node.rotation.y = PI + sin(time * 0.5 + index) * 0.18
+		var arm: Node3D = resident.node.get_child(0).get_node_or_null("RightArm")
+		if arm != null:
+			arm.rotation.z = sin(time * 1.4 + index) * 0.14
+			arm.rotation.x = -0.3 - maxf(0, sin(time * 0.7 + index)) * 0.6

@@ -23,9 +23,9 @@ var notice_time := 0.0
 var hit_time := 0.0
 var hurt_time := 0.0
 var current_shop := ""
-var audio: AudioStreamPlayer
-var shot_sound: AudioStreamWAV
-var chime_sound: AudioStreamWAV
+var audio: FrontierSound
+var current_site := -1
+var step_time := 0.0
 
 func _ready() -> void:
 	town = FrontierTown.new()
@@ -40,16 +40,17 @@ func _ready() -> void:
 	title_camera.position = Vector3(37, 27, 49)
 	title_camera.look_at(Vector3(-2, 0, -5))
 	title_camera.fov = 63
+	audio = FrontierSound.new()
+	add_child(audio)
 	ui = FrontierUI.new()
 	add_child(ui)
 	ui.setup(self)
-	audio = AudioStreamPlayer.new()
-	audio.volume_db = -14
-	add_child(audio)
-	shot_sound = _beep(340, 0.085)
-	chime_sound = _beep(720, 0.2)
 	show_title()
 	get_tree().auto_accept_quit = false
+	if OS.has_feature("web_validation"):
+		var probe = load("res://tests/web_probe.gd").new()
+		add_child(probe)
+		probe.setup(self)
 
 func is_playing() -> bool:
 	return mode == "playing"
@@ -95,6 +96,8 @@ func _apply_state(saved: Dictionary) -> void:
 	player.rotation.y = state.yaw
 	player.head.rotation.x = state.pitch
 	player.velocity = Vector3.ZERO
+	player.reload_progress = 0
+	player.damage_kick = 0
 	player.speed = 8.75 if state.boots else 7.0
 	player.set_weapon(state.selected)
 	player.camera.make_current()
@@ -135,18 +138,26 @@ func _notification(what: int) -> void:
 		_set_mode("paused")
 		ui.show_pause()
 
+func _input(event: InputEvent) -> void:
+	if (event is InputEventMouseButton or event is InputEventKey) and event.is_pressed():
+		audio.unlock()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
 		return
 	var key: int = event.physical_keycode
-	if key == KEY_ESCAPE:
-		if mode in ["paused", "shop"]:
+	if key == KEY_M:
+		audio.toggle_mute()
+	elif key == KEY_F and is_playing():
+		eat_food()
+	elif key == KEY_ESCAPE:
+		if mode in ["paused", "shop", "build"]:
 			resume_game()
 		elif is_playing():
 			_set_mode("paused")
 			ui.show_pause()
 	elif key == KEY_E:
-		if mode == "shop": resume_game()
+		if mode in ["shop", "build"]: resume_game()
 		elif is_playing(): interact()
 	elif key == KEY_N and is_playing() and phase == "day":
 		start_night()
@@ -171,6 +182,7 @@ func interaction_prompt() -> String:
 		if interaction.has("greeting"):
 			return "[ E ]  Say howdy to " + interaction.name
 		if phase == "night": return "Shops reopen at dawn. Protect the bell!"
+		if interaction.has("site"): return "[ E ]  Build defense   •   $150 / $280   •   %d / 2 sites used" % state.structures.size()
 		return "[ E ]  " + ("Ring the bell • start night %d" % state.day if interaction.name == "Town Bell" else "Shop at " + interaction.name)
 	if phase == "day": return "Visit the signed shops • [ N ] start night when ready"
 	return "Defend the bell! Coral dots are foes • Mint dots are your posse"
@@ -182,6 +194,10 @@ func interact() -> void:
 		tell(interaction.name + ": " + interaction.greeting, 7)
 	elif phase == "day":
 		if interaction.name == "Town Bell": start_night()
+		elif interaction.has("site"):
+			current_site = interaction.site
+			_set_mode("build")
+			ui.show_build(current_site)
 		else:
 			current_shop = interaction.name
 			_set_mode("shop")
@@ -199,10 +215,38 @@ func purchase(id: String) -> void:
 		else:
 			message = FrontierRules.CATALOG[id].name + " is yours! Checkpoint saved."
 			player.speed = 8.75 if state.boots else 7.0
-			if id in ["deputy", "turret"]: _build_allies()
-			_sound(chime_sound)
-	ui.show_shop(current_shop, message)
+			if id == "deputy": _build_allies()
+			audio.play("buy")
+	if state.money == old.money: audio.play("deny")
+	ui.show_shop(current_shop, message, state.money < old.money)
 	ui.refresh()
+
+func construct(kind: String) -> void:
+	if mode != "build" or phase != "day": return
+	var old := state.duplicate(true)
+	var message := FrontierRules.build(state, kind, current_site)
+	if message.is_empty():
+		if not save_checkpoint():
+			state = old
+			message = saves.last_error + " Build canceled."
+		else:
+			message = "Building! Win %d night(s)." % FrontierRules.STRUCTURES[kind].nights
+			town.show_construction(state.structures)
+			audio.play("build")
+	if state.money == old.money: audio.play("deny")
+	ui.show_build(current_site, message)
+
+func eat_food() -> void:
+	var old := state.duplicate(true)
+	if not FrontierRules.eat(state):
+		tell("Bag empty? Sunny sells biscuits at the saloon!" if state.food == 0 else "Health full! Save your snack.")
+		audio.play("deny")
+		return
+	if phase == "day" and not save_checkpoint():
+		state = old
+		return
+	audio.play("eat")
+	tell("+40 health!  %d snacks left." % state.food)
 
 func start_night() -> void:
 	if phase != "day" or not is_playing(): return
@@ -213,7 +257,7 @@ func start_night() -> void:
 	spawn_index = 0
 	spawn_timer = 0.7
 	tell("Night %d! Protect yourself and the town bell. Your sunset checkpoint is safe." % state.day, 7)
-	_sound(chime_sound)
+	audio.play("bell")
 
 func _physics_process(delta: float) -> void:
 	if not is_playing(): return
@@ -221,6 +265,12 @@ func _physics_process(delta: float) -> void:
 	notice_time = maxf(0, notice_time - delta)
 	hit_time = maxf(0, hit_time - delta)
 	hurt_time = maxf(0, hurt_time - delta)
+	step_time -= delta
+	if Vector2(player.velocity.x, player.velocity.z).length() > 1 and player.is_on_floor() and step_time <= 0:
+		audio.play("step")
+		step_time = 0.38
+	audio.set_context("night" if phase == "night" else ("saloon" if player.position.x < -12 and player.position.x > -28 and player.position.z > -16 and player.position.z < 2 else "day"))
+	player.reload_progress = 1.0 - reload_time / float(FrontierRules.WEAPONS[state.selected].reload) if reload_time > 0 else 0.0
 	if reload_time > 0:
 		reload_time = maxf(0, reload_time - delta)
 		if reload_time == 0:
@@ -272,8 +322,10 @@ func _build_allies() -> void:
 	allies.clear()
 	for index in state.deputies:
 		_add_ally("deputy", Vector3(-3 if index % 2 == 0 else 3, 0.1, 5 + (index / 2) * 3))
-	for index in state.turrets:
-		_add_ally("turret", FrontierTown.PADS[index] + Vector3(0, 0.1, 0))
+	for structure in state.structures:
+		if structure.remaining == 0:
+			_add_ally(structure.kind, FrontierTown.PADS[structure.site])
+	town.show_construction(state.structures)
 
 func _add_ally(kind: String, pos: Vector3) -> void:
 	var actor := FrontierActor.new()
@@ -293,7 +345,7 @@ func win_night() -> void:
 	save_checkpoint()
 	_set_mode("dawn")
 	ui.show_result(true)
-	_sound(chime_sound)
+	audio.play("complete")
 
 func lose_night() -> void:
 	if not is_playing() or phase != "night": return
@@ -317,6 +369,7 @@ func reload_gun() -> void:
 		if state.ammo[id] == 0: tell("Out of ammo! Resupply at the Gunsmith during the day.")
 		return
 	reload_time = FrontierRules.WEAPONS[id].reload
+	audio.play("reload")
 
 func fire(origin: Vector3, direction: Vector3) -> void:
 	if not is_playing() or shot_time > 0 or reload_time > 0: return
@@ -327,7 +380,7 @@ func fire(origin: Vector3, direction: Vector3) -> void:
 	var weapon: Dictionary = FrontierRules.WEAPONS[state.selected]
 	shot_time = weapon.delay
 	player.flash_muzzle()
-	_sound(shot_sound)
+	audio.play("shot")
 	for pellet in weapon.pellets:
 		var ray_direction := direction.normalized()
 		if weapon.spread > 0:
@@ -384,6 +437,8 @@ func damage_target(target: Node3D, damage: int) -> void:
 	if target == player:
 		FrontierRules.hurt(state, damage)
 		hurt_time = 0.3
+		player.damage_kick = 0.28
+		audio.play("hurt")
 		if state.health == 0: lose_night()
 	elif target == town.bell:
 		town_health = maxi(0, town_health - damage)
@@ -396,6 +451,7 @@ func actor_defeated(actor: FrontierActor) -> void:
 	if not actor.friendly:
 		state.money += FrontierRules.ENEMIES[actor.kind].reward
 		state.kills += 1
+		audio.play("enemy")
 	else:
 		tell("A %s is resting. They'll be back at dawn!" % actor.kind, 4)
 
@@ -425,21 +481,3 @@ func _party_burst(pos: Vector3) -> void:
 func tell(text: String, seconds: float = 4.0) -> void:
 	notice_text = text
 	notice_time = seconds
-
-func _sound(stream: AudioStreamWAV) -> void:
-	audio.stream = stream
-	audio.play()
-
-func _beep(frequency: float, duration: float) -> AudioStreamWAV:
-	var rate := 22050
-	var samples := int(rate * duration)
-	var data := PackedByteArray()
-	data.resize(samples * 2)
-	for index in samples:
-		var envelope := 1.0 - float(index) / samples
-		data.encode_s16(index * 2, int(sin(TAU * frequency * float(index) / rate) * 6500 * envelope))
-	var stream := AudioStreamWAV.new()
-	stream.format = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate = rate
-	stream.data = data
-	return stream

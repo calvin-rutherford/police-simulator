@@ -13,6 +13,10 @@ var weapon: Node3D
 var muzzle: OmniLight3D
 var weapon_id := "revolver"
 var recoil := 0.0
+var reload_progress := 0.0
+var damage_kick := 0.0
+var walk_age := 0.0
+var hand: Node3D
 
 func _ready() -> void:
 	collision_layer = 2
@@ -52,6 +56,8 @@ func set_weapon(id: String) -> void:
 	else:
 		FrontierVisuals.cylinder(weapon, Vector3(0, 0, -0.13), 0.21, 0.65, color).rotation.x = PI / 2
 		FrontierVisuals.cylinder(weapon, Vector3(0, 0, -0.47), 0.24, 0.07, Color("#f7d680")).rotation.x = PI / 2
+	hand = FrontierVisuals.box(weapon, Vector3(0, -0.18, 0.1), Vector3(0.22, 0.18, 0.28), Color("#e4b78e"))
+	FrontierVisuals.box(weapon, Vector3(0, -0.25, 0.23), Vector3(0.23, 0.18, 0.21), Color("#79a9b3"))
 	muzzle = OmniLight3D.new()
 	weapon.add_child(muzzle)
 	muzzle.position.z = -0.55
@@ -94,8 +100,14 @@ func _physics_process(delta: float) -> void:
 	global_position.x = clampf(global_position.x, -65, 65)
 	global_position.z = clampf(global_position.z, -65, 65)
 	recoil = move_toward(recoil, 0, delta * 2.4)
-	weapon.position.z = -0.65 + recoil
-	weapon.rotation.x = recoil * 0.8
+	damage_kick = move_toward(damage_kick, 0, delta)
+	walk_age += delta * Vector2(velocity.x, velocity.z).length()
+	var reload_arc := sin(reload_progress * PI)
+	weapon.position = Vector3(0.38 - reload_arc * 0.12, -0.32 - reload_arc * 0.25 + sin(walk_age * 2.5) * 0.012, -0.65 + recoil)
+	weapon.rotation = Vector3(recoil * 0.8 - reload_arc * 0.6, reload_arc * 0.3, reload_arc * -0.9)
+	hand.position.y = -0.18 + sin(reload_progress * TAU * 3) * reload_arc * 0.1
+	camera.rotation.z = sin(damage_kick * 35) * damage_kick * 0.15
+	camera.position.y = -damage_kick * 0.2
 	muzzle.light_energy = recoil * 12
 
 func flash_muzzle() -> void:
