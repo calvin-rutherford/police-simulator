@@ -4,8 +4,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - Run/control/export instructions and checkpoint semantics: `README.md`. Target engine: Godot 4.5, Compatibility renderer.
 - Economy, wave progression, combat tuning, and save schema: `rules.gd`; validated atomic checkpoint persistence: `save_store.gd`. JSON numeric counters must be restored as integers before gameplay.
-- Scene flow/combat orchestration: `main.gd`; procedural town, inhabitants, and path grid: `town.gd`. All visuals/audio are repository-native procedural assets.
-- Focused validation: `npm test` (`tests/smoke_test.gd`), which uses an isolated `.cache` save. See README for direct binary invocation when Snap cannot access hidden worktrees.
+- Scene flow/combat orchestration: `main.gd`; procedural town, inhabitants, and path grid: `town.gd`; gesture-gated synthesized audio: `sound.gd`. All assets are repository-native. `visuals.gd` batches rigid geometry; exclude animated nodes from batching.
+- Focused validation: `npm test` (`tests/smoke_test.gd`), using an isolated `.cache` save. `GODOT` selects a non-Snap binary. Web build/hosting and separate validation-only export: `README.md`. Keep browser evidence in ignored `.cache`; never deploy the validation bridge.
 
 ## Maintaining this file
 

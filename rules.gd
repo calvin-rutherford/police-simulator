@@ -2,7 +2,12 @@ extends RefCounted
 class_name FrontierRules
 
 # All economy and combat tuning lives here. Ammunition counts include loaded rounds.
-const VERSION := 1
+const VERSION := 2
+const STRUCTURES := {
+	"guard_post": {"name": "Guard post", "price": 150, "nights": 1, "range": 24.0, "damage": 22},
+	"tower": {"name": "Watch tower", "price": 280, "nights": 2, "range": 38.0, "damage": 32},
+}
+const MAX_STRUCTURES := 2
 const WEAPONS := {
 	"revolver": {"name": "Star Revolver", "damage": 26, "pellets": 1, "spread": 0.0, "range": 65.0, "delay": 0.32, "magazine": 6, "reload": 1.1, "color": "#f6cd65"},
 	"shotgun": {"name": "Double-barrel", "damage": 15, "pellets": 6, "spread": 0.085, "range": 26.0, "delay": 0.8, "magazine": 2, "reload": 1.45, "color": "#d89b70"},
@@ -16,7 +21,7 @@ const CATALOG := {
 	"medicine": {"name": "Cactus lemonade", "price": 30, "description": "Restore all sheriff health", "shop": "General Store"},
 	"boots": {"name": "Silver-spur boots", "price": 220, "description": "Permanent +25% movement speed", "shop": "General Store"},
 	"deputy": {"name": "Hire a deputy", "price": 180, "description": "A friendly defender / maximum 6", "shop": "Sheriff Office"},
-	"turret": {"name": "Town popper turret", "price": 350, "description": "Automatic plaza defense / maximum 4", "shop": "Sheriff Office"},
+	"food": {"name": "Biscuit picnic", "price": 25, "description": "+3 snacks • F eats one for +40 health", "shop": "Saloon"},
 }
 const ENEMIES := {
 	"bandit": {"name": "Bandit", "health": 65, "speed": 2.6, "damage": 9, "range": 13.0, "delay": 1.6, "reward": 12, "color": "#dd7974"},
@@ -29,7 +34,7 @@ static func new_state() -> Dictionary:
 		"weapons": ["revolver", "shotgun"], "selected": "revolver",
 		"ammo": {"revolver": 48, "shotgun": 20, "confetti": 0},
 		"loaded": {"revolver": 6, "shotgun": 2, "confetti": 0},
-		"deputies": 0, "turrets": 0, "boots": false, "kills": 0,
+		"deputies": 0, "structures": [], "food": 0, "boots": false, "kills": 0,
 		"position": [0.0, 0.1, 29.0], "yaw": 0.0, "pitch": 0.0}
 
 static func wage(day: int) -> int:
@@ -54,8 +59,8 @@ static func buy(state: Dictionary, item: String) -> String:
 		return "Not enough coins yet."
 	if item == "deputy" and state.deputies >= 6:
 		return "All six deputies are on the team!"
-	if item == "turret" and state.turrets >= 4:
-		return "All four turret pads are occupied!"
+	if item == "food" and state.food > 96:
+		return "Your picnic bag is full!"
 	if item == "boots" and state.boots:
 		return "You already own these boots."
 	if item == "confetti" and "confetti" in state.weapons:
@@ -80,8 +85,28 @@ static func buy(state: Dictionary, item: String) -> String:
 		"medicine": state.health = 100
 		"boots": state.boots = true
 		"deputy": state.deputies += 1
-		"turret": state.turrets += 1
+		"food": state.food += 3
 	return ""
+
+static func build(state: Dictionary, kind: String, site: int) -> String:
+	if not STRUCTURES.has(kind) or site < 0 or site >= 4:
+		return "Choose a marked building site."
+	if state.structures.size() >= MAX_STRUCTURES:
+		return "Two defenses already planned!"
+	for structure in state.structures:
+		if structure.site == site:
+			return "This site is already busy."
+	if state.money < STRUCTURES[kind].price:
+		return "Not enough coins yet."
+	state.money -= STRUCTURES[kind].price
+	state.structures.append({"site": site, "kind": kind, "remaining": STRUCTURES[kind].nights})
+	return ""
+
+static func eat(state: Dictionary) -> bool:
+	if state.food <= 0 or state.health >= 100: return false
+	state.food -= 1
+	state.health = mini(100, state.health + 40)
+	return true
 
 static func hurt(state: Dictionary, damage: int) -> void:
 	var absorbed := mini(state.armor, maxi(0, damage))
@@ -103,6 +128,8 @@ static func dawn(state: Dictionary) -> void:
 	state.day += 1
 	state.money += wage(state.day)
 	state.health = 100
+	for structure in state.structures:
+		structure.remaining = maxi(0, structure.remaining - 1)
 	# A daily supply floor prevents ammunition soft-locks without replacing the shop.
 	state.ammo.revolver = maxi(state.ammo.revolver, 24)
 	state.ammo.shotgun = maxi(state.ammo.shotgun, 8)
@@ -117,15 +144,24 @@ static func valid_state(value: Variant) -> bool:
 	for key in base:
 		if not value.has(key):
 			return false
-	for key in ["version", "day", "money", "health", "armor", "deputies", "turrets", "kills"]:
+	for key in ["version", "day", "money", "health", "armor", "deputies", "food", "kills"]:
 		if not _whole(value[key]):
 			return false
 	if value.version != VERSION or value.day < 1 or value.day > 100000:
 		return false
 	if value.money < 0 or value.money > 100000000 or value.health < 1 or value.health > 100 or value.armor < 0 or value.armor > 75:
 		return false
-	if value.deputies < 0 or value.deputies > 6 or value.turrets < 0 or value.turrets > 4 or value.kills < 0:
+	if value.deputies < 0 or value.deputies > 6 or value.food < 0 or value.food > 99 or value.kills < 0:
 		return false
+	if not value.structures is Array or value.structures.size() > MAX_STRUCTURES:
+		return false
+	var sites := []
+	for structure in value.structures:
+		if not structure is Dictionary or not structure.has_all(["site", "kind", "remaining"]): return false
+		if not structure.kind is String or not STRUCTURES.has(structure.kind): return false
+		if not _whole(structure.site) or structure.site < 0 or structure.site >= 4 or structure.site in sites: return false
+		if not _whole(structure.remaining) or structure.remaining < 0 or structure.remaining > STRUCTURES[structure.kind].nights: return false
+		sites.append(structure.site)
 	if not value.boots is bool or not value.weapons is Array or value.weapons.size() < 2 or value.weapons.size() > 3:
 		return false
 	if value.weapons[0] != "revolver" or value.weapons[1] != "shotgun":

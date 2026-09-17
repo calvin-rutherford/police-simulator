@@ -16,11 +16,15 @@ var path_index := 1
 var home := Vector3.ZERO
 var hit_flash := 0.0
 var age := 0.0
+var stationary := false
+var elevation := 0.0
 
 func setup(owner_game: Node3D, archetype: String, spawn: Vector3) -> void:
 	game = owner_game
 	kind = archetype
-	friendly = kind in ["deputy", "turret"]
+	stationary = kind in FrontierRules.STRUCTURES
+	elevation = 3.1 if kind == "tower" else (1.2 if stationary else 0.0)
+	friendly = kind == "deputy" or stationary
 	position = spawn
 	home = spawn
 	collision_layer = 8 if friendly else 4
@@ -29,23 +33,19 @@ func setup(owner_game: Node3D, archetype: String, spawn: Vector3) -> void:
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.4
 	capsule.height = 2.0 if kind != "monster" else 2.8
-	shape.position.y = capsule.height / 2
+	shape.position.y = capsule.height / 2 + elevation
 	shape.shape = capsule
 	add_child(shape)
 	if friendly:
-		max_health = 180 if kind == "turret" else 110
+		max_health = (260 if kind == "tower" else 180) if stationary else 110
 	else:
 		max_health = FrontierRules.ENEMIES[kind].health
 	health = max_health
-	if kind == "turret":
-		model = Node3D.new()
-		add_child(model)
-		FrontierVisuals.cylinder(model, Vector3(0, 0.5, 0), 0.55, 1, Color("#699fa8"))
-		FrontierVisuals.box(model, Vector3(0, 1.2, 0), Vector3(0.85, 0.55, 0.8), Color("#f2cc79"))
-		FrontierVisuals.cylinder(model, Vector3(0, 1.3, -0.6), 0.15, 1.1, Color("#778697")).rotation.x = PI / 2
-	else:
-		model = FrontierVisuals.person(self, Color("#78aeb8") if friendly else Color(FrontierRules.ENEMIES[kind].color), kind)
-	health_label = FrontierVisuals.label(self, "", Vector3(0, 3.3 if kind == "monster" else 2.7, 0), Color("#bcebd2") if friendly else Color("#ffd0bf"), 16)
+	model = FrontierVisuals.person(self, Color("#78aeb8") if friendly else Color(FrontierRules.ENEMIES[kind].color), "deputy" if stationary else kind, int(absf(spawn.x + spawn.z)) % 8)
+	model.position.y = elevation
+	if friendly or kind == "bandit":
+		FrontierVisuals.box(model, Vector3(0.4, 1.05, -0.48), Vector3(0.14, 0.14, 0.65), Color("#d8b677"))
+	health_label = FrontierVisuals.label(self, "", Vector3(0, (3.3 if kind == "monster" else 2.7) + elevation, 0), Color("#bcebd2") if friendly else Color("#ffd0bf"), 16)
 	_update_label()
 	cooldown = randf_range(0.3, 1.3)
 
@@ -54,19 +54,20 @@ func _update_label() -> void:
 	health_label.text = "%s\n%d / %d" % [title, health, max_health]
 
 func aim_point() -> Vector3:
-	return global_position + Vector3(0, 1.25, 0)
+	return global_position + Vector3(0, 1.25 + elevation, 0)
 
 func take_damage(damage: int) -> void:
 	if dead:
 		return
 	health = maxi(0, health - damage)
-	hit_flash = 0.15
+	hit_flash = 0.25
+	game.audio.play("hit")
 	game.damage_number(aim_point(), damage, friendly)
 	_update_label()
 	if health == 0:
 		dead = true
 		collision_layer = 0
-		health_label.text = "Repairing at dawn" if friendly else "★"
+		health_label.text = "Repairing at dawn" if friendly else "*"
 		game.actor_defeated(self)
 		var tween := create_tween()
 		tween.tween_property(model, "scale", Vector3.ONE * 0.05, 0.25)
@@ -78,7 +79,11 @@ func _physics_process(delta: float) -> void:
 		return
 	age += delta
 	hit_flash = maxf(0, hit_flash - delta)
-	model.position.y = 0.1 if hit_flash > 0 else 0.0
+	model.position.y = elevation + (0.1 if hit_flash > 0 else 0.0)
+	model.rotation.x = hit_flash * 0.7
+	for limb in ["LeftArm", "RightArm"]:
+		var arm := model.get_node_or_null(limb)
+		if arm != null: arm.rotation.x = sin(age * 8 + (PI if limb == "LeftArm" else 0.0)) * minf(0.4, velocity.length() * 0.1)
 	if game.phase != "night":
 		return
 	cooldown -= delta
@@ -88,20 +93,21 @@ func _physics_process(delta: float) -> void:
 		return
 	var destination: Vector3 = target.global_position
 	var distance := Vector2(global_position.x - destination.x, global_position.z - destination.z).length()
-	var reach: float = (30.0 if kind == "turret" else 22.0) if friendly else float(FrontierRules.ENEMIES[kind].range)
+	var reach: float = (float(FrontierRules.STRUCTURES[kind].range) if stationary else 22.0) if friendly else float(FrontierRules.ENEMIES[kind].range)
 	var target_point: Vector3 = game.aim_point(target)
 	var can_attack: bool = distance <= reach and game.clear_shot(aim_point(), target_point, self, target)
 	if can_attack:
 		_face(destination)
 		if cooldown <= 0:
-			cooldown = (0.65 if kind == "turret" else 0.95) if friendly else float(FrontierRules.ENEMIES[kind].delay)
-			var damage: int = (22 if kind == "turret" else 19) if friendly else int(FrontierRules.ENEMIES[kind].damage)
-			if kind in ["bandit", "turret", "deputy"]:
+			cooldown = (0.8 if stationary else 0.95) if friendly else float(FrontierRules.ENEMIES[kind].delay)
+			var damage: int = (int(FrontierRules.STRUCTURES[kind].damage) if stationary else 19) if friendly else int(FrontierRules.ENEMIES[kind].damage)
+			if kind in ["bandit", "deputy"] or stationary:
+				game.audio.play("shot")
 				game.tracer(aim_point(), target_point, Color("#9fe1d6") if friendly else Color("#ffa38e"))
 			game.damage_target(target, damage)
 		velocity.x = 0
 		velocity.z = 0
-	elif kind != "turret":
+	elif not stationary:
 		if path_timer <= 0:
 			path = game.town.route(global_position, destination)
 			path_index = 1 if path.size() > 1 else 0
@@ -117,7 +123,7 @@ func _physics_process(delta: float) -> void:
 		velocity.z = direction.normalized().z * speed
 		_face(waypoint)
 		model.rotation.z = sin(age * 9) * 0.045
-	if kind != "turret":
+	if not stationary:
 		velocity.y -= 20 * delta
 		move_and_slide()
 

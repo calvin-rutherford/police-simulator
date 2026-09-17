@@ -19,8 +19,11 @@ func load_game() -> Dictionary:
 		var parsed: Variant = _parse(file.get_as_text())
 		if FrontierRules.valid_state(parsed):
 			# JSON numbers are floats; restore integer counters before gameplay uses them.
-			for key in ["version", "day", "money", "health", "armor", "deputies", "turrets", "kills"]:
+			for key in ["version", "day", "money", "health", "armor", "deputies", "food", "kills"]:
 				parsed[key] = int(parsed[key])
+			for structure in parsed.structures:
+				structure.site = int(structure.site)
+				structure.remaining = int(structure.remaining)
 			for id in FrontierRules.WEAPONS:
 				parsed.ammo[id] = int(parsed.ammo[id])
 				parsed.loaded[id] = int(parsed.loaded[id])
@@ -61,4 +64,18 @@ func save_game(state: Dictionary) -> bool:
 
 func _parse(text: String) -> Variant:
 	var json := JSON.new()
-	return json.data if json.parse(text) == OK else null
+	if json.parse(text) != OK: return null
+	var data: Variant = json.data
+	# The first slice allowed four instant turrets. Preserve two as completed posts,
+	# refund the others, and keep the same local save slot.
+	if data is Dictionary and data.get("version") == 1:
+		if not FrontierRules._whole(data.get("turrets")) or data.turrets < 0 or data.turrets > 4: return null
+		if not FrontierRules._whole(data.get("money")): return null
+		data.version = FrontierRules.VERSION
+		data.food = 0
+		data.structures = []
+		for site in mini(int(data.turrets), 2):
+			data.structures.append({"site": site, "kind": "guard_post", "remaining": 0})
+		data.money += maxi(0, int(data.turrets) - 2) * 350
+		data.erase("turrets")
+	return data

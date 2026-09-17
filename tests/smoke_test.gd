@@ -28,9 +28,22 @@ func _rules() -> void:
 	check(not FrontierRules.buy(state, "confetti").is_empty() and state.money == before, "unaffordable purchase is atomic")
 	check(not FrontierRules.buy(state, "confetti_ammo").is_empty(), "cannon ammunition requires cannon")
 	state.money = 10000
-	for _i in 4: check(FrontierRules.buy(state, "turret").is_empty(), "turret purchase succeeds")
+	check(FrontierRules.build(state, "guard_post", 0).is_empty(), "guard post starts construction")
+	check(FrontierRules.build(state, "tower", 1).is_empty(), "tower starts construction")
 	before = state.money
-	check(not FrontierRules.buy(state, "turret").is_empty() and state.turrets == 4 and state.money == before, "four-turret hard limit")
+	check(not FrontierRules.build(state, "tower", 2).is_empty() and state.structures.size() == 2 and state.money == before, "combined two-structure limit is atomic")
+	check(state.structures[0].remaining == 1 and state.structures[1].remaining == 2, "different construction durations")
+	var fresh := FrontierRules.new_state()
+	check(not FrontierRules.build(fresh, "tower", 0).is_empty() and fresh.money == 220, "unaffordable build is atomic")
+	check(not FrontierRules.build(fresh, "guard_post", -1).is_empty(), "invalid site rejected")
+	FrontierRules.build(fresh, "guard_post", 0)
+	fresh.money = 500
+	check(not FrontierRules.build(fresh, "tower", 0).is_empty() and fresh.money == 500, "occupied site rejected")
+	check(FrontierRules.buy(state, "food").is_empty() and state.food == 3, "food purchases real inventory")
+	check(not FrontierRules.eat(state) and state.food == 3, "full-health snack is not wasted")
+	state.health = 45
+	check(FrontierRules.eat(state) and state.health == 85 and state.food == 2, "snack heals and consumes one")
+	check(FrontierRules.eat(state) and state.health == 100, "snack health capped")
 	for _i in 6: FrontierRules.buy(state, "deputy")
 	check(not FrontierRules.buy(state, "deputy").is_empty() and state.deputies == 6, "six-deputy limit")
 	check(FrontierRules.buy(state, "confetti").is_empty() and state.ammo.confetti == 20, "novelty weapon unlock includes ammo")
@@ -50,7 +63,12 @@ func _rules() -> void:
 	FrontierRules.dawn(state)
 	check(state.day == 2 and state.money == before + FrontierRules.wage(2), "exactly one next-day wage")
 	check(state.health == 100 and state.ammo.shotgun == 8, "dawn heals and provides supply floor")
-	check(state.turrets == 4 and state.deputies == 6 and "confetti" in state.weapons, "permanent purchases survive dawn")
+	check(state.structures[0].remaining == 0 and state.structures[1].remaining == 1, "post completes after one won night, tower halfway")
+	check(state.deputies == 6 and "confetti" in state.weapons, "permanent purchases survive dawn")
+	FrontierRules.dawn(state)
+	check(state.structures[1].remaining == 0, "tower completes after two won nights")
+	FrontierRules.dawn(state)
+	check(state.structures[0].remaining == 0, "finished construction never underflows")
 	_cleanup()
 	var store := FrontierSave.new(SAVE)
 	check(store.load_game().is_empty(), "no save returns an empty result")
@@ -66,8 +84,17 @@ func _rules() -> void:
 	file.close()
 	check(store.load_game() == restored and not store.last_error.is_empty(), "corrupt primary recovers backup")
 	var bad := state.duplicate(true)
-	bad.turrets = 5
+	bad.structures.append({"site": 2, "kind": "tower", "remaining": 1})
 	check(not store.save_game(bad) and store.load_game() == restored, "invalid state cannot destroy checkpoint")
+	bad = state.duplicate(true)
+	bad.structures[1].site = 0
+	check(not FrontierRules.valid_state(bad), "duplicate saved site rejected")
+	bad = state.duplicate(true)
+	bad.structures[0].remaining = 2
+	check(not FrontierRules.valid_state(bad), "impossible saved duration rejected")
+	bad = state.duplicate(true)
+	bad.food = -1
+	check(not FrontierRules.valid_state(bad), "negative food rejected")
 	bad = state.duplicate(true)
 	bad.ammo.revolver = "oops"
 	check(not FrontierRules.valid_state(bad), "malformed ammo rejected")
@@ -77,6 +104,20 @@ func _rules() -> void:
 	bad = state.duplicate(true)
 	bad.version = 999
 	check(not FrontierRules.valid_state(bad), "unknown version rejected")
+	var legacy := state.duplicate(true)
+	legacy.version = 1
+	legacy.turrets = 4
+	legacy.erase("structures")
+	legacy.erase("food")
+	file = FileAccess.open(SAVE, FileAccess.WRITE)
+	file.store_string(JSON.stringify(legacy))
+	file.close()
+	var migrated := store.load_game()
+	check(migrated.structures.size() == 2 and migrated.money == state.money + 700 and migrated.version == 2, "old slice migrates two turrets and refunds extras")
+	check(migrated.structures[0].site is int and migrated.food is int, "JSON construction/inventory counters restore as integers")
+	var preset := ConfigFile.new()
+	preset.load("res://export_presets.cfg")
+	check(not preset.get_value("preset.0.options", "variant/thread_support", true), "Web export needs no cross-origin isolation")
 	_cleanup()
 
 func _run() -> void:
@@ -87,7 +128,7 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	check(game.mode == "title" and game.ui.load_button.disabled, "launch title handles missing save")
-	check(game.town.residents.size() >= 12, "homes, saloon and shops populated")
+	check(game.town.residents.size() >= 22, "homes, saloon and shops populated")
 	check(game.hostiles.is_empty(), "civilians are never hostiles")
 	game.ui.new_button.pressed.emit()
 	await physics_frame
@@ -110,8 +151,22 @@ func _run() -> void:
 	game.current_shop = "Sheriff Office"
 	game._set_mode("shop")
 	game.purchase("deputy")
-	game.purchase("turret")
-	check(game.allies.size() == 2, "purchased defenders appear in world")
+	game.current_site = 0
+	game._set_mode("build")
+	game.construct("guard_post")
+	game.current_site = 1
+	game.construct("tower")
+	check(game.allies.size() == 1 and game.state.structures.size() == 2, "construction has no instant guard benefit")
+	check(game.saves.load_game().structures[1].remaining == 2, "construction purchase saves immediately")
+	var before_failure := game.state.duplicate(true)
+	game.saves = FrontierSave.new("res://.cache/missing/directory/save.json")
+	game.current_shop = "Saloon"
+	game._set_mode("shop")
+	game.purchase("food")
+	check(game.state == before_failure, "failed purchase save refunds money and inventory")
+	game.saves = FrontierSave.new(SAVE)
+	game.purchase("food")
+	check(game.state.food == 3, "saloon purchase works through game UI")
 	game.resume_game()
 	game.start_night()
 	var checkpoint := game.saves.load_game()
@@ -132,6 +187,7 @@ func _run() -> void:
 	await process_frame
 	check(game.phase == "day" and game.mode == "dawn" and game.state.day == 2, "last foe triggers dawn victory and advancement")
 	check(game.state.money == checkpoint.money + 12 + FrontierRules.wage(2), "victory includes bounty and one wage")
+	check(game.state.structures[0].remaining == 0 and game.state.structures[1].remaining == 1 and game.allies.size() == 2, "dawn creates finished guard and tower scaffold progress")
 	game.resume_game()
 	game.start_night()
 	game.wave_queue.clear()
@@ -156,6 +212,7 @@ func _run() -> void:
 	game.load_game()
 	check(game.mode == "playing" and game.phase == "day" and game.state.day == 2 and game.state.health == 100, "retry restores sunset without duplicating wages")
 	check(game.allies.size() == 2 and not game.allies[0].dead, "retry restores purchased defenders")
+	check(game.state.structures[1].remaining == 1 and game.state.food == 3, "failure/reload does not advance construction or lose sunset food")
 	game.start_night()
 	game.damage_target(game.player, 1000)
 	check(game.mode == "defeat" and game.state.health == 0, "player defeat transition")
@@ -165,6 +222,10 @@ func _run() -> void:
 	game.ui.load_button.pressed.emit()
 	check(game.state.day == 2 and game.mode == "playing", "Load button restores playable progress")
 	check(game.town.route(Vector3(-40, 0, -23), Vector3(0, 0, -23)).size() > 15, "hostile routes go around buildings")
+	check(game.audio.unlocked, "button interaction unlocks audio")
+	game.audio.toggle_mute()
+	check(game.audio.muted, "mute control works")
+	game.audio.toggle_mute()
 	game.audio.stop()
 	game.queue_free()
 	# Let the audio mixer release short-lived playback resources before shutdown.
