@@ -1,5 +1,8 @@
 # Sunset Sheriff
 
+The project title is **Sunset Sheriff**; its GitHub repository retains the earlier
+`police-simulator` name. This README describes the current Godot game.
+
 A kid-friendly first-person Western town-defense game for **Godot 4.5**, Compatibility renderer, and desktop browsers. All characters, scenery, icons and synthesized audio are original repository-native assets. No gore, real-money purchases, account, or backend.
 
 ## Play
@@ -66,6 +69,19 @@ npm run export:web
 The Linux x86_64 export script downloads pinned official Godot **4.5 stable** and matching Web templates when needed. `GODOT` overrides the executable, not the required version. It imports before exporting, stores tooling/caches locally in ignored directories, and outputs only the static site to `public/`. The first template download is large; subsequent builds reuse it.
 
 `export_presets.cfg` uses **single-threaded Web**, no extensions, no cross-origin isolation requirement and no service worker. The generated site is approximately 37 MiB before HTTP compression. Static primitives are batched by material; browser directional shadows are disabled to reduce frame cost. Native smoke coverage includes economy, food, migration, corruption recovery, atomic purchase failure, construction durations/limits, real raycasts, defenders, victory, failure and retry.
+
+### Automated validation
+
+`.github/workflows/validate.yml` builds the production Web export and runs the
+existing native smoke suite on Ubuntu with Godot 4.5 stable. The job is bounded
+to ten minutes, with separate command timeouts, read-only repository permissions
+and no deployment step. It uses the same build/test scripts shown above; the
+first build downloads official engine tooling and Web templates.
+
+A passing job covers import, static export and the native assertions. Browser
+interaction, subjective audio quality and hardware performance still require the
+separate checks below. This workflow is prepared locally; no hosted run or
+playable public deployment is implied.
 
 ### Browser validation
 

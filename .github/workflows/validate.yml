@@ -1,0 +1,25 @@
+name: Validate Sunset Sheriff
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  godot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build the production Web export with pinned Godot 4.5
+        run: timeout 360 npm run export:web
+      - name: Run native smoke checks with the same Godot binary
+        env:
+          GODOT: ${{ github.workspace }}/.tools/godot-4.5-stable/Godot_v4.5-stable_linux.x86_64
+        run: timeout 120 npm test
